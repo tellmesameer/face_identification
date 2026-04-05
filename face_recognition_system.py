@@ -55,11 +55,20 @@ class FaceRecognitionSystem:
             raise ValueError(f"Cannot read {image_path}")
         return cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 
-    def detect_faces(self, image):
+    def detect_faces(self, image, confidence_threshold=0.4, min_face_size=40):
         (h, w) = image.shape[:2]
+        resized = image
+        scale = 1.0
+
+        downscale = 600 / max(h, w)
+        if downscale < 1:
+            resized = cv2.resize(image, (int(w * downscale), int(h * downscale)))
+            scale = 1 / downscale
+
+        (rh, rw) = resized.shape[:2]
 
         blob = cv2.dnn.blobFromImage(
-            cv2.resize(image, (300, 300)),
+            cv2.resize(resized, (300, 300)),
             1.0,
             (300, 300),
             (104.0, 177.0, 123.0)
@@ -72,9 +81,23 @@ class FaceRecognitionSystem:
         for i in range(detections.shape[2]):
             confidence = detections[0, 0, i, 2]
 
-            if confidence > 0.6:
-                box = detections[0, 0, i, 3:7] * np.array([w, h, w, h])
+            if confidence > confidence_threshold:
+                box = detections[0, 0, i, 3:7] * np.array([rw, rh, rw, rh])
                 x1, y1, x2, y2 = box.astype("int")
+
+                x1 = max(0, min(rw - 1, x1))
+                y1 = max(0, min(rh - 1, y1))
+                x2 = max(0, min(rw, x2))
+                y2 = max(0, min(rh, y2))
+
+                if (x2 - x1) < min_face_size or (y2 - y1) < min_face_size:
+                    continue
+
+                if scale != 1.0:
+                    x1 = int(x1 * scale)
+                    y1 = int(y1 * scale)
+                    x2 = int(x2 * scale)
+                    y2 = int(y2 * scale)
 
                 boxes.append((y1, x2, y2, x1))
 
@@ -96,7 +119,7 @@ class FaceRecognitionSystem:
             boxes = self.detect_faces(rgb)
 
             if boxes:
-                encodings = face_recognition.face_encodings(rgb, boxes)
+                encodings = face_recognition.face_encodings(rgb, boxes, num_jitters=1)
             else:
                 print(f"No face: {image_path}")
 
@@ -109,19 +132,26 @@ class FaceRecognitionSystem:
 
         return encodings
 
-    def process_dataset(self, dataset_path):
+    def process_dataset(self, dataset_path, max_images=200):
         dataset_dir = Path(dataset_path)
         print(f"Processing dataset: {dataset_dir}")
 
         valid_ext = {".jpg", ".jpeg", ".png", ".webp"}
+        count = 0
 
         for root, _, files in os.walk(dataset_dir):
             for file in files:
+                if count >= max_images:
+                    print(f"Reached max_images limit: {max_images}")
+                    print(f"Indexed faces: {len(self.metadata)}")
+                    return
+
                 if Path(file).suffix.lower() not in valid_ext:
                     continue
 
                 path = os.path.join(root, file)
                 print(f"Loading {path}")
+                count += 1
 
                 encs = self._get_embedding(path)
 
