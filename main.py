@@ -1,5 +1,4 @@
 from face_recognition_system import FaceRecognitionSystem
-import os
 from pathlib import Path
 
 def main():
@@ -8,24 +7,21 @@ def main():
     system = FaceRecognitionSystem(".")
 
     # Define paths
-    BASE_DIR = Path("e:/face_identification")
-    DATA_DIR = BASE_DIR / "data"
-    REFERENCE_IMG_DIR = DATA_DIR / "reference_images"
-    DATASET_DIR = "D:\\nandalal_photos"
-    RESULTS_DIR = DATA_DIR / "results"
-    
-    # Process the entire dataset and index faces
-    system.process_dataset(DATASET_DIR)
+    base_dir = Path("e:/face_identification")
+    data_dir = base_dir / "data"
+    reference_img_dir = data_dir / "reference_images"
+    dataset_dir = Path(r"D:\nandalal_photos")
+    results_file = data_dir / "results" / "matched_paths.json"
+    results_file.parent.mkdir(parents=True, exist_ok=True)
 
-    # Search for our reference target 
-    # According to face_recognition standard docs, 0.6 is a standard threshold.
-    results = system.find_matches(REFERENCE_IMG_DIR, threshold=0.6)
+    # Analyze the dataset incrementally and resume from prior progress when possible.
+    results = system.find_matches(reference_img_dir, dataset_dir, threshold=0.5)
 
-    # Copy any matches found
+    # Save matched image paths as JSON
     if results:
-        system.copy_results(results, results_path)
+        system.save_result_paths(results, results_file)
     else:
-        print("No results to copy.")
+        print("No matching images found.")
 
 if __name__ == "__main__":
     main()
